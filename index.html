@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 트랜스포메이션 전략 경영 의사결정</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <style>
+      body {
+        font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif;
+      }
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in {
+        animation: fade-in 0.5s ease-out forwards;
+      }
+      @keyframes bobbing {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+      }
+      .animate-bobbing {
+        animation: bobbing 1.5s ease-in-out infinite;
+      }
+      @keyframes slide-in-from-left {
+        from { transform: translateX(-50px); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+      }
+      .animate-slide-in {
+        animation: slide-in-from-left 0.8s ease-out forwards;
+      }
+      @keyframes gradient-flow {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+      }
+      .animate-gradient-flow {
+        background: linear-gradient(-45deg, #020617, #0f172a, #1e293b, #0f172a);
+        background-size: 400% 400%;
+        animation: gradient-flow 15s ease infinite;
+      }
+      @keyframes pulse-glow {
+        0%, 100% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.6); }
+        50% { box-shadow: 0 0 30px rgba(59, 130, 246, 1); }
+      }
+      .animate-pulse-glow {
+        animation: pulse-glow 2.5s ease-in-out infinite;
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react/": "https://esm.sh/react@18.3.1/",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "react-dom/": "https://esm.sh/react-dom@18.3.1/",
+    "@google/genai": "https://esm.sh/@google/genai",
+    "recharts": "https://esm.sh/recharts@2.12.7",
+    "jspdf": "https://esm.sh/jspdf@2.5.1",
+    "html2canvas": "https://esm.sh/html2canvas@1.4.1"
+  }
+}
+</script>
+</head>
+  <body class="bg-black text-slate-300">
+    <div class="fixed inset-0 -z-10 h-full w-full bg-black bg-[linear-gradient(to_right,#1e293b_1px,transparent_1px),linear-gradient(to_bottom,#1e293b_1px,transparent_1px)] bg-[size:4rem_4rem] opacity-20"></div>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
