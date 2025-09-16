@@ -1,6 +1,5 @@
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { GoogleGenAI } from "@google/genai";
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Legend } from 'recharts';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -11,40 +10,8 @@ import { Progress } from './components/Progress';
 import { Trophy, RotateCcw, FileText, ChevronLeft, ChevronRight, Download, Brain, BarChart3, AiIcon, Users, Shield, Wrench } from './components/icons';
 import { STAGES, STAGE_NAMES, COMPETENCIES, TRIGGER_CARDS } from './constants';
 
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable is not set.");
-}
-const ai = new GoogleGenAI({ apiKey: API_KEY });
-
-const getCardsForStage = (stage: number, scenario: GameState['scenario']) => {
-  return scenario[stage] || [];
-};
-
-const INITIAL_GAME_STATE: GameState = {
-  screen: 'intro',
-  loadingMessage: null,
-  scenario: {},
-  currentStage: 0,
-  currentCard: 0,
-  competencies: { data: 0, strategy: 0, leadership: 0, ethics: 0, technical: 0 },
-  totalScore: 0,
-  showFeedback: false,
-  lastDecision: null,
-  finalAnalysis: null,
-  decisionHistory: [],
-};
-
 const MAX_COMPETENCY_SCORE = 200;
 const MAX_TOTAL_SCORE = 1000;
-
-const LOADING_SUBTEXTS = [
-  "전략적 결정 분석 중...",
-  "역량 데이터 컴파일 중...",
-  "인사이트 종합 중...",
-  "미래 시나리오 시뮬레이션 중...",
-  "맞춤형 조언 생성 중...",
-];
 
 const getGradeDetails = (score: number) => {
     const roundedScore = Math.round(score);
@@ -83,218 +50,15 @@ const formatReportSection = (markdownText: string) => {
         .join('');
 };
 
+type Screen = 'intro' | 'simulation_sample' | 'report_sample';
+
 const App = () => {
-  const [gameState, setGameState] = useState<GameState>(INITIAL_GAME_STATE);
+  const [screen, setScreen] = useState<Screen>('intro');
   const finalReportRef = useRef<HTMLDivElement>(null);
-  const [isSampleReport, setIsSampleReport] = useState(false);
 
-  const handleStartGame = () => {
-    setGameState(prev => ({ 
-        ...INITIAL_GAME_STATE, 
-        screen: 'game', 
-        scenario: TRIGGER_CARDS,
-    }));
-  };
-
-  const handleRestart = () => {
-    setGameState(INITIAL_GAME_STATE);
-  };
-  
-  const handleShowSample = () => {
-    setGameState(prev => ({
-      ...INITIAL_GAME_STATE,
-      screen: 'final_report',
-      finalAnalysis: SAMPLE_ANALYSIS_REPORT,
-      totalScore: 760,
-      competencies: { data: 170, strategy: 130, leadership: 150, ethics: 180, technical: 140 }
-    }));
-    setIsSampleReport(true);
-  };
-  
-  const handleBackToIntro = () => {
-    setGameState(INITIAL_GAME_STATE);
-    setIsSampleReport(false);
-  };
-
-  const handleDecision = async (option: TriggerCardOption) => {
-    setGameState(prev => ({ ...prev, loadingMessage: 'AI 컨설턴트가 브리핑 노트를 작성 중입니다...' }));
-
-    let impactDescription = '';
-    try {
-      const prompt = `당신은 AI 전략 컨설턴트입니다. 사용자가 AI 전환 비즈니스 시뮬레이션에서 '${option.text}'라는 선택을 했습니다. 이 결정이 가져올 '진행방식'과 '기대효과'를 전문가적이고 간결한 보고서 형식으로 작성해주세요. 응답은 반드시 다음 형식에 맞춰 한글로 작성되어야 합니다. 다른 설명은 추가하지 마세요.
-
-## 진행방식
-- [箇条書き形式で記述]
-- [箇条書き形式で記述]
-
-## 기대효과
-- [箇条書き形式で記述]
-- [箇条書き形式で記述]
-`;
-      const result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      });
-      impactDescription = result.text;
-    } catch (error) {
-      console.error("Error generating feedback:", error);
-      impactDescription = "AI 컨설턴트의 답변을 가져오는 데 실패했습니다. 기본값으로 진행합니다.\n\n## 진행방식\n- AI 시스템이 분석을 진행합니다.\n\n## 기대효과\n- 역량 점수가 업데이트됩니다.";
-    }
-
-    setGameState(prev => {
-      const newCompetencies = { ...prev.competencies };
-      Object.keys(option.effects).forEach(key => {
-        const competencyKey = key as keyof typeof newCompetencies;
-        const currentScore = newCompetencies[competencyKey];
-        const change = option.effects[key] * 1.25; 
-        newCompetencies[competencyKey] = Math.min(MAX_COMPETENCY_SCORE, currentScore + change);
-      });
-      
-      const newTotalScore = Object.values(newCompetencies).reduce((sum, score) => sum + score, 0);
-
-      const currentScenario = getCardsForStage(prev.currentStage, prev.scenario)[prev.currentCard];
-      const newHistoryEntry = {
-        stage: prev.currentStage,
-        title: currentScenario.title,
-        choice: option.text,
-        allOptions: currentScenario.options.map(o => o.text),
-        effects: option.effects,
-      };
-
-      return {
-        ...prev,
-        competencies: newCompetencies,
-        totalScore: Math.min(MAX_TOTAL_SCORE, newTotalScore),
-        showFeedback: true,
-        loadingMessage: null,
-        lastDecision: {
-          optionText: option.text,
-          effects: option.effects,
-          impactDescription
-        },
-        decisionHistory: [...prev.decisionHistory, newHistoryEntry],
-      };
-    });
-  };
-
-  const handleNextFeedback = () => {
-    const cardsForCurrentStage = getCardsForStage(gameState.currentStage, gameState.scenario);
-    const nextCard = gameState.currentCard + 1;
-    const isLastCardOfStage = nextCard >= cardsForCurrentStage.length;
-    
-    const nextStage = gameState.currentStage + 1;
-    const isLastStage = nextStage >= STAGES.length;
-
-    if (isLastCardOfStage && isLastStage) {
-      handleFinalAnalysis();
-    } else {
-      setGameState(prev => {
-        if (isLastCardOfStage) {
-          return {
-            ...prev,
-            currentStage: nextStage,
-            currentCard: 0,
-            showFeedback: false,
-            lastDecision: null,
-          };
-        } else {
-          return {
-            ...prev,
-            currentCard: nextCard,
-            showFeedback: false,
-            lastDecision: null,
-          };
-        }
-      });
-    }
-  };
-
-  const handleFinalAnalysis = async () => {
-    setGameState(prev => ({ ...prev, showFeedback: false, loadingMessage: 'AI트랜스포메이션 전략추진 역량 분석 결과를 생성 중입니다...' }));
-    
-    const competencyScores = Object.entries(gameState.competencies)
-      .map(([key, value]) => `${COMPETENCIES[key].name}(${Math.round(value)}점)`)
-      .join(', ');
-
-    const decisionHistoryText = gameState.decisionHistory.map(h => {
-      const effectsText = Object.entries(h.effects)
-          .map(([key, value]) => `${COMPETENCIES[key].shortName}: ${value > 0 ? '+' : ''}${value * 1.25}`)
-          .join(', ');
-      const otherOptionsText = h.allOptions
-        .filter(opt => opt !== h.choice)
-        .map(opt => `  - (비선택) ${opt}`)
-        .join('\n');
-  
-      return `* **${STAGES[h.stage]} 단계: "${h.title}"**
-  - **(선택)** ${h.choice}
-  - **(선택의 결과)** ${effectsText}
-${otherOptionsText ? `  - **(고려된 다른 선택지)**\n${otherOptionsText}` : ''}`;
-    }).join('\n\n');
-
-    try {
-        const prompt = `
-        당신은 최고 수준의 AI 전략 경영 컨설턴트입니다.
-        사용자가 'AI 트랜스포메이션 전략 경영 의사결정' 시뮬레이션을 완료했습니다.
-        사용자의 **전체 의사결정 내역**과 최종 결과는 다음과 같습니다. 이 내역을 분석의 **가장 중요한 근거**로 사용해야 합니다.
-
-        ### 사용자의 의사결정 내역 (선택지와 그 결과)
-${decisionHistoryText}
-
-        ### 최종 결과 요약
-        - 총점: ${Math.round(gameState.totalScore)}/${MAX_TOTAL_SCORE}점
-        - 역량별 점수: ${competencyScores}
-
-        **위의 실제 의사결정 내역을 반드시 기반으로 하여**, 사용자의 리더십과 전략적 판단을 심층적으로 분석하는 전문적인 최종 분석 보고서를 작성해주세요.
-
-        **분석 가이드라인:**
-        1.  **과정 중심 분석:** 최종 점수뿐만 아니라, **어떤 선택을 통해 그 점수에 도달했는지** 과정에 집중하세요.
-        2.  **Trade-off 분석:** 사용자가 선택한 옵션과 **선택하지 않은 다른 옵션들**을 비교하며, 어떤 기회비용이 발생했는지 분석하세요. 예를 들어, 단기 성과를 위해 장기적 투자를 포기한 선택 등을 짚어주세요.
-        3.  **패턴 식별:** 개별 결정들을 나열하는 것을 넘어, 10단계 전반에 걸쳐 일관되게 나타나는 **의사결정 패턴이나 성향**을 도출하세요 (예: 기술 중심적, 리더십 우선, 안정 지향 등).
-        4.  **구체적 근거 제시:** 모든 분석은 **"예를 들어, 3단계 'AI 투자 규모 결정'에서 과감한 투자를 선택한 것은..."** 와 같이 반드시 사용자의 실제 선택을 근거로 제시해야 합니다.
-
-        보고서는 반드시 다음 형식과 순서를 정확히 지켜 한글로 작성해주세요. 다른 설명은 절대 추가하지 마세요:
-
-        ## 리더십 유형 분석
-        [점수와 의사결정 패턴을 종합하여 사용자의 리더십 유형에 대한 **창의적인 이름**과 **2-3문장의 설명**을 작성합니다. 예: "**데이터 기반 현실주의자 (Data-Driven Realist)**\n당신은 감정보다 데이터를 신뢰하며, 모든 결정의 근거를 명확한 지표에서 찾으려는 리더입니다..."]
-
-        ## 강점 (Strengths)
-        - [**의사결정 내역을 바탕으로**, 사용자의 가장 두드러진 강점 2-3가지를 글머리 기호('- ')로 시작하여 **매우 상세하게** 분석합니다. **"예를 들어, '${STAGES[2]}' 단계에서 '내부 인재 양성'을 선택한 것은 장기적인 안목과 직원 중심의 리더십을 보여주는 훌륭한 결정이었습니다."** 와 같이 구체적인 선택을 직접 언급하며 설명해야 합니다.]
-        - [두 번째 강점 분석]
-
-        ## 개선필요영역 (Areas for Improvement)
-        - [**의사결정 내역을 바탕으로**, 성장을 위해 보완이 필요한 역량이나 의사결정 패턴 2-3가지를 글머리 기호('- ')로 시작하여 **매우 상세하게** 지적합니다. **"반면, '${STAGES[0]}' 단계에서 '경쟁사 벤치마킹'에 집중한 것은 단기적인 대응에 그쳐 장기적인 전략 수립 기회를 놓친 아쉬운 선택입니다."** 와 같이 아쉬웠던 선택을 직접 언급하며 설명해야 합니다.]
-        - [두 번째 개선 필요 영역 분석]
-
-        ## 실행권장사항 (Action Recommendations)
-        - [분석된 강점과 개선점을 바탕으로, 사용자가 당장 실행할 수 있는 **구체적이고 실질적인 권장사항 3가지**를 글머리 기호('- ')로 시작하여 제안합니다. 명확한 행동 계획을 제시해주세요.]
-        - [두 번째 권장 사항]
-        - [세 번째 권장 사항]
-
-        분석 내용에는 **강조**하고 싶은 핵심 키워드를 Markdown의 bold 형식(\`**텍스트**\`)으로 반드시 포함시켜 주세요.
-      `;
-      
-      const result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      });
-      
-      setGameState(prev => ({
-        ...prev,
-        screen: 'final_report',
-        loadingMessage: null,
-        finalAnalysis: result.text,
-      }));
-
-    } catch (error) {
-      console.error("Error generating final analysis:", error);
-      setGameState(prev => ({
-        ...prev,
-        screen: 'final_report',
-        loadingMessage: null,
-        finalAnalysis: "AI트랜스포메이션 전략추진 역량 분석 결과를 생성하는 데 실패했습니다. 네트워크 연결을 확인하고 다시 시도해주세요.",
-      }));
-    }
-  };
+  const showIntro = () => setScreen('intro');
+  const showSimulationSample = () => setScreen('simulation_sample');
+  const showReportSample = () => setScreen('report_sample');
 
   const handleDownloadPdf = () => {
     const reportElement = finalReportRef.current;
@@ -339,41 +103,22 @@ ${decisionHistoryText}
     });
 };
 
-
   const renderScreen = () => {
-    if (gameState.loadingMessage) {
-        return <LoadingScreen text={gameState.loadingMessage} />;
-    }
-    
-    switch (gameState.screen) {
-        case 'intro':
-            return <IntroScreen onShowSample={handleShowSample} />;
-        case 'final_report':
+    switch (screen) {
+        case 'simulation_sample':
+            return <SimulationSampleScreen onBack={showIntro} />;
+        case 'report_sample':
              return <FinalResultScreen 
-                gameState={gameState} 
-                onRestart={handleRestart} 
-                onBackToIntro={handleBackToIntro}
-                isSample={isSampleReport}
+                onBackToIntro={showIntro}
                 onDownload={handleDownloadPdf} 
                 reportRef={finalReportRef} 
             />;
-        case 'game':
+        case 'intro':
         default:
-             const cardsForStage = getCardsForStage(gameState.currentStage, gameState.scenario);
-             if (cardsForStage.length === 0) {
-                 return <LoadingScreen text={`시뮬레이션을 준비 중입니다...`} />;
-             }
-             return (
-              <div className="max-w-7xl mx-auto">
-                 <AppHeader stageTitle={`${STAGE_NAMES[gameState.currentStage]}`} />
-                 <ScenarioProgressBar currentStage={gameState.currentStage} currentCardInStage={gameState.currentCard} totalCardsInStage={cardsForStage.length} />
-                {gameState.showFeedback ? (
-                  <FeedbackScreen gameState={gameState} onNext={handleNextFeedback} />
-                ) : (
-                  <GameScreen gameState={gameState} onDecision={handleDecision} />
-                )}
-              </div>
-            );
+             return <IntroScreen 
+                onShowSimulationSample={showSimulationSample} 
+                onShowReportSample={showReportSample} 
+            />;
     }
   }
 
@@ -386,7 +131,7 @@ ${decisionHistoryText}
   );
 }
 
-const IntroScreen = ({ onShowSample }: { onShowSample: () => void; }) => (
+const IntroScreen = ({ onShowSimulationSample, onShowReportSample }: { onShowSimulationSample: () => void; onShowReportSample: () => void; }) => (
     <div className="animate-fade-in text-slate-300">
         <main className="text-center py-16 md:py-24">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-slate-100 via-blue-400 to-slate-100 opacity-0" style={{ animation: 'fade-in 0.5s 0.1s ease-out forwards' }}>
@@ -407,15 +152,18 @@ const IntroScreen = ({ onShowSample }: { onShowSample: () => void; }) => (
                 최고의 AI 리더로 성장하십시오.
             </p>
             <div className="mt-12 flex flex-col sm:flex-row gap-4 justify-center opacity-0" style={{ animation: 'fade-in 0.5s 0.4s ease-out forwards' }}>
+                 <Button onClick={onShowSimulationSample} variant="default" size="lg" className="animate-pulse-glow">시뮬레이션 샘플 보기</Button>
+                 <Button onClick={onShowReportSample} variant="outline" size="lg">샘플 보고서 보기</Button>
+            </div>
+             <div className="mt-8 text-center">
                 <a 
                   href="https://digitaltransformation.co.kr/ax-contact/" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-black transform hover:-translate-y-px active:translate-y-0 bg-blue-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)] hover:bg-blue-500 hover:shadow-[0_0_25px_rgba(59,130,246,0.6)] focus-visible:ring-blue-400 h-11 px-6 text-base animate-pulse-glow !text-base"
+                  className="text-blue-400 hover:text-blue-300 transition-colors font-medium"
                 >
-                    AX전략 경영의사결정 시뮬레이션 문의하기
+                    AX전략 경영의사결정 시뮬레이션 문의하기 &rarr;
                 </a>
-                <Button onClick={onShowSample} variant="outline" size="lg">샘플 보고서 보기</Button>
             </div>
         </main>
 
@@ -468,33 +216,54 @@ const IntroScreen = ({ onShowSample }: { onShowSample: () => void; }) => (
                 ))}
             </div>
         </section>
-
-        <section className="py-16 text-center opacity-0" style={{ animation: 'fade-in 0.5s 1.1s ease-out forwards' }}>
-            <Card className="max-w-3xl mx-auto">
-                <CardContent className="!p-12">
-                    <div className="space-y-5">
-                        <h2 className="text-3xl font-bold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-slate-100 to-slate-400">
-                            AI 트랜스포메이션 시대!
-                            <br />
-                            경영자의 전략의사결정이 기업의 미래를 바꿉니다.
-                        </h2>
-                        <div className="pt-4">
-                           <a 
-                              href="https://digitaltransformation.co.kr/ax-contact/" 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-black transform hover:-translate-y-px active:translate-y-0 bg-blue-600 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)] hover:bg-blue-500 hover:shadow-[0_0_25px_rgba(59,130,246,0.6)] focus-visible:ring-blue-400 h-11 px-6 text-base animate-pulse-glow !text-base"
-                            >
-                                AX전략 경영의사결정 시뮬레이션 문의하기
-                            </a>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-        </section>
     </div>
 );
 
+const SimulationSampleScreen = ({ onBack }: { onBack: () => void; }) => {
+    const sampleCompetencies = { data: 45, strategy: 50, leadership: 60, ethics: 35, technical: 55 };
+    const sampleTotalScore = Object.values(sampleCompetencies).reduce((a, b) => a + b, 0);
+
+    const sampleLastDecision = {
+        optionText: "B. 우선순위가 높은 핵심 데이터부터 선별적으로 정제하여 빠른 AI 도입을 추진합니다.",
+        effects: { data: 2.25, strategy: 1.875, leadership: 1.5, ethics: 1, technical: 1.875 },
+        impactDescription: `## 진행방식
+- 핵심 비즈니스에 직접적 영향을 주는 고객 데이터와 판매 데이터를 우선순위로 선정합니다.
+- 데이터 정제 및 가공을 위한 자동화 스크립트를 개발하여 1차 정제를 수행합니다.
+- 데이터 전문가와 현업 담당자가 협업하여 정제된 데이터의 품질을 검증합니다.
+
+## 기대효과
+- 제한된 리소스를 효율적으로 사용하여 단기간에 가시적인 데이터 품질 개선 효과를 얻을 수 있습니다.
+- 빠르게 개선된 데이터를 파일럿 프로젝트에 활용하여 AI 도입의 성공 가능성을 높일 수 있습니다.
+- 성공 사례를 통해 데이터 품질 개선의 중요성에 대한 전사적 공감대를 형성하기 용이합니다.`
+    };
+
+    return (
+        <div className="animate-fade-in">
+            <div className="mb-8">
+                <Button onClick={onBack} variant="outline" size="lg">
+                    <ChevronLeft className="w-5 h-5 mr-2" />
+                    처음으로 돌아가기
+                </Button>
+            </div>
+            <AppHeader stageTitle={`${STAGE_NAMES[0]}`} />
+            <ScenarioProgressBar currentStage={3} currentCardInStage={4} totalCardsInStage={10} />
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+                <div className="lg:col-span-1">
+                    <CompetencyDashboard competencies={sampleCompetencies} totalScore={sampleTotalScore} />
+                </div>
+                <div className="lg:col-span-2">
+                    <DecisionCard
+                        scenario={TRIGGER_CARDS[0][3]}
+                        onDecision={() => {}}
+                        disabled={true}
+                        briefingNote={<BriefingNoteContent lastDecision={sampleLastDecision} />}
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const AppHeader = ({ stageTitle }: { stageTitle: string }) => (
     <header className="text-center my-8 animate-fade-in">
@@ -533,26 +302,6 @@ const ScenarioProgressBar = ({ currentStage, currentCardInStage, totalCardsInSta
         </CardContent>
     </Card>
 );
-
-const GameScreen = ({ gameState, onDecision }: { gameState: GameState; onDecision: (option: TriggerCardOption) => void; }) => {
-  const { currentStage, currentCard, scenario } = gameState;
-  const currentScenario = getCardsForStage(currentStage, scenario)[currentCard];
-
-  if (!currentScenario) {
-    return <div className="text-center text-red-500">현재 단계에 대한 시나리오를 찾을 수 없습니다.</div>;
-  }
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div className="lg:col-span-1">
-         <CompetencyDashboard competencies={gameState.competencies} totalScore={gameState.totalScore} />
-      </div>
-      <div className="lg:col-span-2">
-        <DecisionCard scenario={currentScenario} onDecision={onDecision} />
-      </div>
-    </div>
-  );
-};
 
 const CompetencyDashboard = ({ competencies, totalScore }: { competencies: Record<string, number>; totalScore: number; }) => {
   const gradeDetails = getGradeDetails(totalScore);
@@ -597,7 +346,7 @@ const CompetencyDashboard = ({ competencies, totalScore }: { competencies: Recor
   );
 };
 
-const DecisionCard = ({ scenario, onDecision }: { scenario: TriggerCard; onDecision: (option: TriggerCardOption) => void; }) => (
+const DecisionCard = ({ scenario, onDecision, disabled = false, briefingNote }: { scenario: TriggerCard; onDecision: (option: TriggerCardOption) => void; disabled?: boolean; briefingNote?: React.ReactNode }) => (
   <Card className="animate-fade-in h-full">
     <CardHeader>
       <CardTitle className="text-2xl">{scenario.title}</CardTitle>
@@ -610,37 +359,25 @@ const DecisionCard = ({ scenario, onDecision }: { scenario: TriggerCard; onDecis
             key={index}
             variant="outline"
             onClick={() => onDecision(option)}
-            className="w-full justify-between h-auto py-4 px-5 text-left !text-base hover:border-blue-500"
+            className={`w-full justify-between h-auto py-4 px-5 text-left !text-base ${disabled ? 'cursor-not-allowed opacity-70' : 'hover:border-blue-500'}`}
+            disabled={disabled}
           >
             <span className="text-slate-300 leading-snug">{option.text}</span>
             <ChevronRight className="w-5 h-5 flex-shrink-0 text-slate-500" />
           </Button>
         ))}
       </div>
+      {disabled && !briefingNote && (
+          <div className="text-center pt-8">
+              <p className="text-slate-400 text-lg">👇 선택지를 클릭하면 AI 컨설턴트가 아래와 같은 브리핑 노트를 제공합니다. 👇</p>
+          </div>
+      )}
+      {briefingNote}
     </CardContent>
   </Card>
 );
 
-const FeedbackScreen = ({ gameState, onNext }: { gameState: GameState; onNext: () => void; }) => {
-  const { lastDecision } = gameState;
-
-  if (!lastDecision) {
-    return <div>오류: 이전 결정 정보를 찾을 수 없습니다.</div>;
-  }
-  
-  return (
-     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-fade-in">
-      <div className="lg:col-span-1">
-         <CompetencyDashboard competencies={gameState.competencies} totalScore={gameState.totalScore} />
-      </div>
-      <div className="lg:col-span-2">
-         <FeedbackCard lastDecision={lastDecision} onNext={onNext} />
-      </div>
-    </div>
-  );
-};
-
-const FeedbackCard = ({ lastDecision, onNext }: { lastDecision: GameState['lastDecision'], onNext: () => void; }) => {
+const BriefingNoteContent = ({ lastDecision }: { lastDecision: GameState['lastDecision'] }) => {
   const [method, setMethod] = useState('');
   const [effect, setEffect] = useState('');
 
@@ -666,16 +403,13 @@ const FeedbackCard = ({ lastDecision, onNext }: { lastDecision: GameState['lastD
   }, [lastDecision]);
 
   return (
-    <Card className="animate-fade-in border-green-500/50 shadow-green-500/10">
-      <CardHeader>
-        <CardTitle className="text-2xl flex items-center gap-3">
+    <div className="mt-8 pt-8 border-t border-slate-800">
+        <CardTitle className="text-2xl flex items-center gap-3 mb-6">
           <AiIcon className="w-7 h-7 text-green-400" />
           AI 컨설턴트 브리핑 노트
         </CardTitle>
-      </CardHeader>
-      <CardContent>
         <div className="mb-6 p-4 rounded-lg bg-slate-800/50 border border-slate-700">
-          <p className="text-sm text-slate-400 mb-1">당신의 선택:</p>
+          <p className="text-sm text-slate-400 mb-1">선택한 결정:</p>
           <p className="text-base text-slate-200">{lastDecision?.optionText}</p>
         </div>
         
@@ -689,31 +423,53 @@ const FeedbackCard = ({ lastDecision, onNext }: { lastDecision: GameState['lastD
             <ul className="list-disc list-inside space-y-2 text-slate-300" dangerouslySetInnerHTML={{ __html: effect }} />
           </div>
         </div>
+    </div>
+  );
+};
 
-        <div className="mt-8 pt-6 border-t border-slate-800 flex justify-end">
-          <Button onClick={onNext} variant="green" size="lg">
-            다음 단계로 <ChevronRight className="w-5 h-5 ml-2" />
-          </Button>
-        </div>
+const FeedbackCard = ({ lastDecision, onNext, showNextButton = true }: { lastDecision: GameState['lastDecision'], onNext: () => void; showNextButton?: boolean }) => {
+  return (
+    <Card className="animate-fade-in border-green-500/50 shadow-green-500/10">
+      <CardHeader>
+        <CardTitle className="text-2xl flex items-center gap-3">
+          <AiIcon className="w-7 h-7 text-green-400" />
+          AI 컨설턴트 브리핑 노트
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {/* Note: This component is currently not used in the demo flow, 
+            but kept for potential future use of the full simulation. */}
+        <BriefingNoteContent lastDecision={lastDecision} />
+
+        {showNextButton && (
+          <div className="mt-8 pt-6 border-t border-slate-800 flex justify-end">
+            <Button onClick={onNext} variant="green" size="lg">
+              다음 단계로 <ChevronRight className="w-5 h-5 ml-2" />
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
 };
 
-const FinalResultScreen = ({ gameState, onRestart, onBackToIntro, isSample, onDownload, reportRef }: {
-  gameState: GameState;
-  onRestart: () => void;
+
+const FinalResultScreen = ({ onBackToIntro, onDownload, reportRef }: {
   onBackToIntro: () => void;
-  isSample: boolean;
   onDownload: () => void;
   reportRef: React.RefObject<HTMLDivElement>;
 }) => {
-  const { totalScore, competencies, finalAnalysis } = gameState;
+  const sampleGameState = {
+      finalAnalysis: SAMPLE_ANALYSIS_REPORT,
+      totalScore: 760,
+      competencies: { data: 170, strategy: 130, leadership: 150, ethics: 180, technical: 140 }
+  };
+  
+  const { totalScore, competencies, finalAnalysis } = sampleGameState;
   
   const analysisParts = useMemo(() => {
     if (!finalAnalysis) return { archetypeTitle: '', archetypeDesc: '', strengths: '', improvements: '', recommendations: '' };
 
-    // More robust regex to handle variations in whitespace from the AI model
     const archetypeMatch = finalAnalysis.match(/##\s*리더십 유형 분석\s*\*\*([^*]+)\*\*\s*([\s\S]*?)(?=\n##\s*|$)/);
     const strengthsMatch = finalAnalysis.match(/##\s*강점 \(Strengths\)\s*([\s\S]*?)(?=\n##\s*|$)/);
     const improvementsMatch = finalAnalysis.match(/##\s*개선필요영역 \(Areas for Improvement\)\s*([\s\S]*?)(?=\n##\s*|$)/);
@@ -731,7 +487,7 @@ const FinalResultScreen = ({ gameState, onRestart, onBackToIntro, isSample, onDo
   const competencyDataForCharts = Object.entries(COMPETENCIES).map(([key, comp]) => ({
     subject: comp.shortName,
     name: comp.name,
-    score: Math.round(competencies[key]),
+    score: Math.round(competencies[key as keyof typeof competencies]),
     fullMark: MAX_COMPETENCY_SCORE,
   }));
   
@@ -744,7 +500,7 @@ const FinalResultScreen = ({ gameState, onRestart, onBackToIntro, isSample, onDo
               <Trophy className="w-10 h-10 text-yellow-400" />
               <div>
                   <h1 className="text-3xl md:text-4xl font-bold text-slate-100">AI트랜스포메이션 전략추진 역량 분석 결과</h1>
-                  <p className="text-lg text-slate-400 mt-1">{isSample ? "샘플 보고서" : "당신의 AI 트랜스포메이션 리더십 분석 결과입니다."}</p>
+                  <p className="text-lg text-slate-400 mt-1">샘플 보고서</p>
               </div>
           </div>
           
@@ -820,9 +576,9 @@ const FinalResultScreen = ({ gameState, onRestart, onBackToIntro, isSample, onDo
           </div>
       </div>
       <div className="mt-8 flex justify-center gap-4">
-          <Button onClick={isSample ? onBackToIntro : onRestart} variant="outline" size="lg">
-              {isSample ? <ChevronLeft className="w-5 h-5 mr-2" /> : <RotateCcw className="w-5 h-5 mr-2" />}
-              {isSample ? '처음으로 돌아가기' : '처음으로'}
+          <Button onClick={onBackToIntro} variant="outline" size="lg">
+              <ChevronLeft className="w-5 h-5 mr-2" />
+              처음으로 돌아가기
           </Button>
           <Button onClick={onDownload} size="lg">
               <Download className="w-5 h-5 mr-2" />
@@ -831,33 +587,6 @@ const FinalResultScreen = ({ gameState, onRestart, onBackToIntro, isSample, onDo
       </div>
     </div>
   );
-};
-
-const LoadingScreen = ({ text }: { text: string }) => {
-    const [subtext, setSubtext] = useState(LOADING_SUBTEXTS[0]);
-
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setSubtext(prev => {
-                const currentIndex = LOADING_SUBTEXTS.indexOf(prev);
-                const nextIndex = (currentIndex + 1) % LOADING_SUBTEXTS.length;
-                return LOADING_SUBTEXTS[nextIndex];
-            });
-        }, 2000); // Change text every 2 seconds
-
-        return () => clearInterval(interval);
-    }, []);
-    
-    return (
-        <div className="fixed inset-0 flex flex-col items-center justify-center bg-black/80 z-50 backdrop-blur-sm transition-opacity duration-300">
-            <div className="flex items-center gap-4">
-                <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                <AiIcon className="w-12 h-12 text-blue-400 animate-pulse" />
-            </div>
-            <p className="mt-6 text-xl text-slate-300 font-medium tracking-wide">{text}</p>
-            <p className="mt-2 text-base text-slate-400 transition-opacity duration-500 h-6">{subtext}</p>
-        </div>
-    );
 };
 
 export default App;

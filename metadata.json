@@ -1,5 +1,5 @@
 {
   "name": "[Demo]AI 트랜스포메이션 전략 경영 의사결정 시뮬레이션",
-  "description": "A simulation game where you make decisions to lead a company's AI transformation journey and see the impact on key competencies.",
+  "description": "A demo of an AI transformation strategy simulation. Explore sample scenarios and see the resulting analysis report.",
   "requestFramePermissions": []
 }
