@@ -1,9 +1,12 @@
 import React from 'react';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+// FIX: Changed ButtonProps from an interface to a type with an intersection.
+// This correctly inherits all standard button attributes from React.ComponentProps<'button'>,
+// resolving errors related to missing properties like 'onClick', 'children', and 'className'.
+type ButtonProps = React.ComponentProps<'button'> & {
   variant?: 'default' | 'outline' | 'green';
   size?: 'default' | 'lg';
-}
+};
 
 export const Button = ({ children, className, variant = 'default', size = 'default', ...props }: ButtonProps) => {
   const baseClasses = "inline-flex items-center justify-center rounded-lg text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 focus-visible:ring-offset-black transform hover:-translate-y-px active:translate-y-0";
@@ -21,7 +24,7 @@ export const Button = ({ children, className, variant = 'default', size = 'defau
 
   return (
     <button
-      className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className}`}
+      className={`${baseClasses} ${variantClasses[variant]} ${sizeClasses[size]} ${className || ''}`}
       {...props}
     >
       {children}

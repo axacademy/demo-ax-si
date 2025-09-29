@@ -106,10 +106,11 @@ const App = () => {
   const renderScreen = () => {
     switch (screen) {
         case 'simulation_sample':
-            return <SimulationSampleScreen onBack={showIntro} />;
+            return <SimulationSampleScreen onBack={showIntro} onShowReportSample={showReportSample} />;
         case 'report_sample':
              return <FinalResultScreen 
                 onBackToIntro={showIntro}
+                onShowSimulationSample={showSimulationSample}
                 onDownload={handleDownloadPdf} 
                 reportRef={finalReportRef} 
             />;
@@ -152,7 +153,7 @@ const IntroScreen = ({ onShowSimulationSample, onShowReportSample }: { onShowSim
                 최고의 AI 리더로 성장하십시오.
             </p>
             <div className="mt-12 flex flex-col sm:flex-row gap-4 justify-center opacity-0" style={{ animation: 'fade-in 0.5s 0.4s ease-out forwards' }}>
-                 <Button onClick={onShowSimulationSample} variant="default" size="lg" className="animate-pulse-glow">시뮬레이션 샘플 보기</Button>
+                 <Button onClick={onShowSimulationSample} variant="default" size="lg" className="animate-pulse-glow">시뮬레이션 체험하기</Button>
                  <Button onClick={onShowReportSample} variant="outline" size="lg">샘플 보고서 보기</Button>
             </div>
              <div className="mt-8 text-center">
@@ -219,14 +220,27 @@ const IntroScreen = ({ onShowSimulationSample, onShowReportSample }: { onShowSim
     </div>
 );
 
-const SimulationSampleScreen = ({ onBack }: { onBack: () => void; }) => {
-    const sampleCompetencies = { data: 45, strategy: 50, leadership: 60, ethics: 35, technical: 55 };
-    const sampleTotalScore = Object.values(sampleCompetencies).reduce((a, b) => a + b, 0);
+const SimulationSampleScreen = ({ onBack, onShowReportSample }: { onBack: () => void; onShowReportSample: () => void; }) => {
+    const initialCompetencies = { data: 30, strategy: 35, leadership: 40, ethics: 25, technical: 40 };
+    // FIX: Add explicit type to useState to ensure TypeScript correctly infers `competencies` as Record<string, number>.
+    // This allows Object.values(competencies) to return a number[], fixing the reduce operation error.
+    const [competencies, setCompetencies] = useState<Record<string, number>>(initialCompetencies);
+    const [lastDecision, setLastDecision] = useState<GameState['lastDecision'] | null>(null);
+    const [decisionMade, setDecisionMade] = useState(false);
 
-    const sampleLastDecision = {
-        optionText: "B. 우선순위가 높은 핵심 데이터부터 선별적으로 정제하여 빠른 AI 도입을 추진합니다.",
-        effects: { data: 2.25, strategy: 1.875, leadership: 1.5, ethics: 1, technical: 1.875 },
-        impactDescription: `## 진행방식
+    const totalScore = useMemo(() => Object.values(competencies).reduce((a, b) => a + b, 0), [competencies]);
+
+    const impactDescriptions = {
+        "A": `## 진행방식
+- 전사 데이터 거버넌스팀을 구성하여 데이터 표준화 및 정제 프로세스를 수립합니다.
+- 모든 부서의 데이터를 통합 데이터 레이크에 수집하고 일괄 정제 작업을 수행합니다.
+- 데이터 품질 측정 KPI를 설정하고 지속적으로 모니터링합니다.
+
+## 기대효과
+- 전사적으로 일관되고 신뢰할 수 있는 데이터 기반을 마련하여 향후 모든 AI 프로젝트의 성공률을 높입니다.
+- 데이터 사일로 현상을 해결하고 데이터 활용도를 극대화할 수 있습니다.
+- 장기적으로 데이터 관리 비용을 절감하고 데이터 관련 리스크를 줄일 수 있습니다.`,
+        "B": `## 진행방식
 - 핵심 비즈니스에 직접적 영향을 주는 고객 데이터와 판매 데이터를 우선순위로 선정합니다.
 - 데이터 정제 및 가공을 위한 자동화 스크립트를 개발하여 1차 정제를 수행합니다.
 - 데이터 전문가와 현업 담당자가 협업하여 정제된 데이터의 품질을 검증합니다.
@@ -234,36 +248,82 @@ const SimulationSampleScreen = ({ onBack }: { onBack: () => void; }) => {
 ## 기대효과
 - 제한된 리소스를 효율적으로 사용하여 단기간에 가시적인 데이터 품질 개선 효과를 얻을 수 있습니다.
 - 빠르게 개선된 데이터를 파일럿 프로젝트에 활용하여 AI 도입의 성공 가능성을 높일 수 있습니다.
-- 성공 사례를 통해 데이터 품질 개선의 중요성에 대한 전사적 공감대를 형성하기 용이합니다.`
+- 성공 사례를 통해 데이터 품질 개선의 중요성에 대한 전사적 공감대를 형성하기 용이합니다.`,
+        "C": `## 진행방식
+- 외부 데이터 전문 기업과 파트너십을 맺어 필요한 데이터를 구매하거나 API 형태로 제공받습니다.
+- 내부 데이터와 외부 데이터를 결합하여 데이터의 양과 다양성을 확보합니다.
+- 외부 데이터 활용에 대한 법적, 윤리적 문제를 검토하고 계약을 체결합니다.
+
+## 기대효과
+- 내부 데이터만으로는 얻을 수 없는 새로운 인사이트를 발굴할 수 있습니다.
+- 데이터 준비에 드는 시간을 단축하고 즉시 AI 모델 개발에 착수할 수 있습니다.
+- 시장 트렌드나 경쟁사 동향 등 외부 환경 변화에 더 빠르게 대응할 수 있습니다.`
+    };
+    
+    const handleDecision = (option: TriggerCardOption) => {
+        if (decisionMade) return;
+
+        const updatedCompetencies = { ...competencies };
+        for (const key in option.effects) {
+            if (Object.prototype.hasOwnProperty.call(updatedCompetencies, key)) {
+                updatedCompetencies[key as keyof typeof updatedCompetencies] = Math.min(
+                    MAX_COMPETENCY_SCORE,
+                    Math.round(updatedCompetencies[key as keyof typeof updatedCompetencies] + option.effects[key] * 10)
+                );
+            }
+        }
+        setCompetencies(updatedCompetencies);
+        
+        const optionKey = option.text.charAt(0);
+        setLastDecision({
+            optionText: option.text,
+            effects: option.effects,
+            impactDescription: impactDescriptions[optionKey as keyof typeof impactDescriptions]
+        });
+
+        setDecisionMade(true);
     };
 
     return (
         <div className="animate-fade-in">
-            <div className="mb-8">
+            <AppHeader stageTitle={`${STAGE_NAMES[0]}`} />
+            <ScenarioProgressBar currentStage={0} currentCardInStage={4} totalCardsInStage={TRIGGER_CARDS[0].length} />
+
+            <div className={`grid grid-cols-1 ${decisionMade ? 'lg:grid-cols-3' : 'justify-items-center'} gap-8 mt-8`}>
+                {decisionMade && (
+                    <div className="lg:col-span-1 w-full">
+                        <CompetencyDashboard competencies={competencies} totalScore={totalScore} />
+                    </div>
+                )}
+                <div className={decisionMade ? 'lg:col-span-2 w-full' : 'max-w-4xl w-full'}>
+                    <DecisionCard
+                        scenario={TRIGGER_CARDS[0][3]}
+                        onDecision={handleDecision}
+                        disabled={decisionMade}
+                        briefingNote={
+                            decisionMade ? <BriefingNoteContent lastDecision={lastDecision} /> : (
+                                <div className="text-center pt-8">
+                                    <p className="text-slate-400 text-lg">👆 위 선택지 중 하나를 결정하면, AI 컨설턴트가 결정에 대한 브리핑 노트와 역량 변화를 보여줍니다. 👆</p>
+                                </div>
+                            )
+                        }
+                    />
+                </div>
+            </div>
+            <div className="mt-8 flex justify-center gap-4">
                 <Button onClick={onBack} variant="outline" size="lg">
                     <ChevronLeft className="w-5 h-5 mr-2" />
                     처음으로 돌아가기
                 </Button>
-            </div>
-            <AppHeader stageTitle={`${STAGE_NAMES[0]}`} />
-            <ScenarioProgressBar currentStage={3} currentCardInStage={4} totalCardsInStage={10} />
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
-                <div className="lg:col-span-1">
-                    <CompetencyDashboard competencies={sampleCompetencies} totalScore={sampleTotalScore} />
-                </div>
-                <div className="lg:col-span-2">
-                    <DecisionCard
-                        scenario={TRIGGER_CARDS[0][3]}
-                        onDecision={() => {}}
-                        disabled={true}
-                        briefingNote={<BriefingNoteContent lastDecision={sampleLastDecision} />}
-                    />
-                </div>
+                <Button onClick={onShowReportSample} variant="outline" size="lg">
+                    샘플 보고서 보기
+                    <ChevronRight className="w-5 h-5 ml-2" />
+                </Button>
             </div>
         </div>
     );
 };
+
 
 const AppHeader = ({ stageTitle }: { stageTitle: string }) => (
     <header className="text-center my-8 animate-fade-in">
@@ -321,10 +381,10 @@ const CompetencyDashboard = ({ competencies, totalScore }: { competencies: Recor
                   <comp.icon className={`w-5 h-5 mr-3 ${comp.color}`} />
                   <span className="font-medium text-slate-300 text-base">{comp.name}</span>
                </div>
-              <span className="text-base font-mono text-slate-200">{Math.round(competencies[key])}<span className="text-sm text-slate-500">/{MAX_COMPETENCY_SCORE}</span></span>
+              <span className="text-base font-mono text-slate-200">{Math.round(competencies[key as keyof typeof competencies])}<span className="text-sm text-slate-500">/{MAX_COMPETENCY_SCORE}</span></span>
             </div>
             <Progress 
-                value={(competencies[key] / MAX_COMPETENCY_SCORE) * 100} 
+                value={(competencies[key as keyof typeof competencies] / MAX_COMPETENCY_SCORE) * 100} 
                 colorClass={`${comp.bgColor} shadow-lg`} 
                 indicatorClassName={`shadow-sm ${comp.bgColor.replace('bg-', 'shadow-')}/50`} 
                 className="h-2.5"
@@ -359,19 +419,14 @@ const DecisionCard = ({ scenario, onDecision, disabled = false, briefingNote }: 
             key={index}
             variant="outline"
             onClick={() => onDecision(option)}
-            className={`w-full justify-between h-auto py-4 px-5 text-left !text-base ${disabled ? 'cursor-not-allowed opacity-70' : 'hover:border-blue-500'}`}
+            className={`w-full justify-between h-auto py-4 px-5 text-left !text-base transition-all duration-200 ${disabled ? 'cursor-not-allowed opacity-60 bg-slate-800/60' : 'hover:border-blue-500 hover:bg-slate-800/80'}`}
             disabled={disabled}
           >
             <span className="text-slate-300 leading-snug">{option.text}</span>
-            <ChevronRight className="w-5 h-5 flex-shrink-0 text-slate-500" />
+            {!disabled && <ChevronRight className="w-5 h-5 flex-shrink-0 text-slate-500" />}
           </Button>
         ))}
       </div>
-      {disabled && !briefingNote && (
-          <div className="text-center pt-8">
-              <p className="text-slate-400 text-lg">👇 선택지를 클릭하면 AI 컨설턴트가 아래와 같은 브리핑 노트를 제공합니다. 👇</p>
-          </div>
-      )}
       {briefingNote}
     </CardContent>
   </Card>
@@ -403,7 +458,7 @@ const BriefingNoteContent = ({ lastDecision }: { lastDecision: GameState['lastDe
   }, [lastDecision]);
 
   return (
-    <div className="mt-8 pt-8 border-t border-slate-800">
+    <div className="mt-8 pt-8 border-t border-slate-800 animate-fade-in">
         <CardTitle className="text-2xl flex items-center gap-3 mb-6">
           <AiIcon className="w-7 h-7 text-green-400" />
           AI 컨설턴트 브리핑 노트
@@ -454,8 +509,9 @@ const FeedbackCard = ({ lastDecision, onNext, showNextButton = true }: { lastDec
 };
 
 
-const FinalResultScreen = ({ onBackToIntro, onDownload, reportRef }: {
+const FinalResultScreen = ({ onBackToIntro, onShowSimulationSample, onDownload, reportRef }: {
   onBackToIntro: () => void;
+  onShowSimulationSample: () => void;
   onDownload: () => void;
   reportRef: React.RefObject<HTMLDivElement>;
 }) => {
@@ -579,6 +635,10 @@ const FinalResultScreen = ({ onBackToIntro, onDownload, reportRef }: {
           <Button onClick={onBackToIntro} variant="outline" size="lg">
               <ChevronLeft className="w-5 h-5 mr-2" />
               처음으로 돌아가기
+          </Button>
+          <Button onClick={onShowSimulationSample} variant="default" size="lg">
+              시뮬레이션 체험하기
+              <ChevronRight className="w-5 h-5 ml-2" />
           </Button>
           <Button onClick={onDownload} size="lg">
               <Download className="w-5 h-5 mr-2" />
